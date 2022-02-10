@@ -1,0 +1,8 @@
+apiVersion: shipwright.io/v1alpha1
+kind: BuildRun
+metadata:
+  generateName: buildpack-typscript-buildrun-
+  name: buildpack-typscript-buildrun
+spec:
+  buildRef:
+    name: buildpack-typescript-build

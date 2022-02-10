@@ -1,0 +1,89 @@
+apiVersion: shipwright.io/v1alpha1
+kind: ClusterBuildStrategy
+metadata:
+  name: buildpacks-v3-typescript
+spec:
+  buildSteps:
+    - name: prepare
+      image: quay.io/maxgio92/buildpacks-builder:full-typescript
+      imagePullPolicy: Always
+      securityContext:
+        runAsUser: 0
+        capabilities:
+          add:
+            - CHOWN
+      command:
+        - chown
+      args:
+        - -R
+        - "1000:1000"
+        - /tekton/home
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 250m
+          memory: 65Mi
+    - name: build-and-push
+      image: quay.io/maxgio92/buildpacks-builder:full-typescript
+      imagePullPolicy: Always
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      command:
+        - /bin/bash
+      args:
+        - -c
+        - |
+          set -euo pipefail
+
+          echo "> Processing environment variables..."
+          ENV_DIR="/platform/env"
+
+          envs=($(env))
+
+          # Denying the creation of non required files from system environments.
+          # The creation of a file named PATH (corresponding to PATH system environment)
+          # caused failure for python source during pip install (https://github.com/Azure-Samples/python-docs-hello-world)
+          block_list=("PATH" "HOSTNAME" "PWD" "_" "SHLVL" "HOME" "")
+
+          for env in "${envs[@]}"; do
+            blocked=false
+
+            IFS='=' read -r key value string <<< "$env"
+
+            for str in "${block_list[@]}"; do
+              if [[ "$key" == "$str" ]]; then
+                blocked=true
+                break
+              fi
+            done
+
+            if [ "$blocked" == "false" ]; then
+              path="${ENV_DIR}/${key}"
+              echo -n "$value" > "$path"
+            fi
+          done
+
+          mkdir /tmp/cache /tmp/layers
+
+          /cnb/lifecycle/creator \
+            '-app=$(params.shp-source-context)' \
+            -cache-dir=/tmp/cache \
+            -layers=/tmp/layers \
+            -report=/tmp/report.toml \
+            '$(params.shp-output-image)'
+
+          # Store the image digest
+          grep digest /tmp/report.toml | tr -d ' \"\n' | sed s/digest=// > "$(results.shp-image-digest.path)"
+      volumeMounts:
+        - mountPath: /platform/env
+          name: platform-env
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 250m
+          memory: 65Mi

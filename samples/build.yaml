@@ -1,0 +1,15 @@
+apiVersion: shipwright.io/v1alpha1
+kind: Build
+metadata:
+  name: buildpack-typescript-build
+spec:
+  source:
+    url: https://github.com/maxgio92/sample-typescript
+    contextDir: source-build
+  strategy:
+    name: buildpacks-v3-typescript
+    kind: ClusterBuildStrategy
+  output:
+    image: quay.io/maxgio92/sample-typescript:latest
+    credentials:
+      name: push-secret
